@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DataChat AI - Conversational Data Analysis</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        .chat-bubble { animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .typing-indicator span {
+            animation: blink 1.4s infinite both;
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background: #667eea;
+            border-radius: 50%;
+            margin: 0 2px;
+        }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink {
+            0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); }
+            30% { opacity: 1; transform: scale(1.2); }
+        }
+        .code-block { font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; }
+        .fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .hover-lift { transition: transform 0.2s, box-shadow 0.2s; }
+        .hover-lift:hover { transform: translateY(-2px); box-shadow: 0 10px 40px -10px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body class="bg-gray-50 h-screen overflow-hidden">
+
+    <!-- App Container -->
+    <div class="flex h-screen">
+        
+        <!-- Sidebar -->
+        <aside class="w-64 bg-white border-r border-gray-200 flex flex-col shadow-sm z-10">
+            <div class="p-6 border-b border-gray-100">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 gradient-bg rounded-xl flex items-center justify-center text-white font-bold text-xl">
+                        D
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-gray-900 text-lg">DataChat AI</h1>
+                        <p class="text-xs text-gray-500">Chat with your data</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data Sources -->
+            <div class="flex-1 overflow-y-auto p-4">
+                <div class="mb-6">
+                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Data Sources</h3>
+                    
+                    <!-- Upload Button -->
+                    <label class="flex items-center gap-3 p-3 rounded-lg border-2 border-dashed border-gray-300 hover:border-indigo-500 hover:bg-indigo-50 cursor-pointer transition-all group mb-3">
+                        <svg class="w-5 h-5 text-gray-400 group-hover:text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                        </svg>
+                        <span class="text-sm text-gray-600 group-hover:text-indigo-600 font-medium">Upload File</span>
+                        <input type="file" id="fileInput" class="hidden" accept=".csv,.xlsx,.xls,.json" multiple>
+                    </label>
+
+                    <div id="fileList" class="space-y-2">
+                        <!-- Files will appear here -->
+                    </div>
+                </div>
+
+                <!-- Sample Datasets -->
+                <div class="mb-6">
+                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Try Samples</h3>
+                    <button onclick="loadSample('sales')" class="w-full text-left p-3 rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-3 text-sm text-gray-700 mb-2">
+                        <span class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 text-xs font-bold">📊</span>
+                        Sales Performance
+                    </button>
+                    <button onclick="loadSample('customers')" class="w-full text-left p-3 rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-3 text-sm text-gray-700 mb-2">
+                        <span class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center text-green-600 text-xs font-bold">👥</span>
+                        Customer Analytics
+                    </button>
+                    <button onclick="loadSample('stocks')" class="w-full text-left p-3 rounded-lg hover:bg-gray-100 transition-colors flex items-center gap-3 text-sm text-gray-700">
+                        <span class="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 text-xs font-bold">📈</span>
+                        Stock Prices
+                    </button>
+                </div>
+
+                <!-- Quick Actions -->
+                <div>
+                    <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Quick Actions</h3>
+                    <div class="space-y-2">
+                        <button onclick="quickAsk('Show summary statistics')" class="w-full text-left px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">📋 Summary Stats</button>
+                        <button onclick="quickAsk('Create visualizations')" class="w-full text-left px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">📊 Auto Visualize</button>
+                        <button onclick="quickAsk('Find correlations')" class="w-full text-left px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">🔗 Correlation Matrix</button>
+                        <button onclick="quickAsk('Detect outliers')" class="w-full text-left px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">🚨 Outlier Detection</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- User Profile -->
+            <div class="p-4 border-t border-gray-200">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
+                        U
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-sm font-medium text-gray-900">Free Plan</p>
+                        <p class="text-xs text-gray-500">15 messages left</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="flex-1 flex flex-col bg-gray-50 relative">
+            
+            <!-- Empty State -->
+            <div id="emptyState" class="flex-1 flex items-center justify-center p-8">
+                <div class="text-center max-w-2xl">
+                    <div class="w-20 h-20 gradient-bg rounded-2xl flex items-center justify-center text-white text-3xl mb-6 mx-auto shadow-lg hover-lift cursor-pointer" onclick="document.getElementById('fileInput').click()">
+                        💬
+                    </div>
+                    <h2 class="text-3xl font-bold text-gray-900 mb-4">Chat with your data</h2>
+                    <p class="text-lg text-gray-600 mb-8">Upload a CSV, Excel, or JSON file and ask questions in plain English. Get instant insights, visualizations, and analysis.</p>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover-lift cursor-pointer" onclick="quickAsk('What are the key trends in this data?')">
+                            <div class="text-2xl mb-2">🔍</div>
+                            <h3 class="font-semibold text-gray-900 mb-1">Explore</h3>
+                            <p class="text-sm text-gray-600">"What are the key trends?"</p>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover-lift cursor-pointer" onclick="quickAsk('Create a bar chart of sales by region')">
+                            <div class="text-2xl mb-2">📊</div>
+                            <h3 class="font-semibold text-gray-900 mb-1">Visualize</h3>
+                            <p class="text-sm text-gray-600">"Chart sales by region"</p>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 hover-lift cursor-pointer" onclick="quickAsk('Predict next month values')">
+                            <div class="text-2xl mb-2">🔮</div>
+                            <h3 class="font-semibold text-gray-900 mb-1">Forecast</h3>
+                            <p class="text-sm text-gray-600">"Predict next month"</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Messages -->
+            <div id="chatContainer" class="flex-1 overflow-y-auto p-6 space-y-6 hidden">
+                <!-- Messages will be inserted here -->
+            </div>
+
+            <!-- Data Preview Panel (Collapsible) -->
+            <div id="dataPanel" class="hidden border-t border-gray-200 bg-white">
+                <div class="flex items-center justify-between p-4 border-b border-gray-200">
+                    <div class="flex items-center gap-4">
+                        <h3 class="font-semibold text-gray-900">Data Preview</h3>
+                        <span id="rowCount" class="text-xs bg-gray-100 px-2 py-1 rounded-full text-gray-600">0 rows</span>
+                        <span id="colCount" class="text-xs bg-gray-100 px-2 py-1 rounded-full text-gray-600">0 columns</span>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="downloadData()" class="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                            Export
+                        </button>
+                        <button onclick="toggleDataPanel()" class="p-1.5 text-gray-400 hover:text-gray-600">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto max-h-64">
+                    <table id="dataTable" class="w-full text-sm text-left">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50 sticky top-0">
+                            <tr id="tableHeader"></tr>
+                        </thead>
+                        <tbody id="tableBody" class="divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="border-t border-gray-200 bg-white p-4">
+                <div class="max-w-4xl mx-auto relative">
+                    <div class="flex items-end gap-2 bg-gray-100 rounded-2xl p-2 focus-within:ring-2 focus-within:ring-indigo-500 focus-within:bg-white transition-all">
+                        <button onclick="document.getElementById('fileInput').click()" class="p-2 text-gray-400 hover:text-gray-600 rounded-xl hover:bg-gray-200 transition-colors flex-shrink-0" title="Attach file">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                        </button>
+                        <textarea id="userInput" rows="1" placeholder="Ask anything about your data..." class="flex-1 bg-transparent border-none resize-none max-h-32 py-2 px-2 focus:outline-none text-gray-900 placeholder-gray-400" onkeydown="handleKeyDown(event)"></textarea>
+                        <button onclick="sendMessage()" id="sendBtn" class="p-2 gradient-bg text-white rounded-xl hover:opacity-90 transition-opacity flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                        </button>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-2 text-center">DataChat AI may produce inaccurate analysis. Verify important calculations.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Global State
+        let currentData = null;
+        let currentFileName = '';
+        let chatHistory = [];
+        let isProcessing = false;
+
+        // Initialize
+        document.getElementById('fileInput').addEventListener('change', handleFileUpload);
+        document.getElementById('userInput').addEventListener('input', autoResize);
+
+        function autoResize(e) {
+            e.target.style.height = 'auto';
+            e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px';
+        }
+
+        function handleKeyDown(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        }
+
+        // File Upload Handler
+        function handleFileUpload(e) {
+            const files = Array.from(e.target.files);
+            files.forEach(file => {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        let data;
+                        if (file.name.endsWith('.csv')) {
+                            data = parseCSV(event.target.result);
+                        } else if (file.name.endsWith('.json')) {
+                            data = JSON.parse(event.target.result);
+                            if (!Array.isArray(data)) data = [data];
+                        } else if (file.name.match(/\.xlsx?$/)) {
+                            const workbook = XLSX.read(event.target.result, {type: 'binary'});
+                            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                            data = XLSX.utils.sheet_to_json(firstSheet);
+                        }
+                        
+                        if (data && data.length > 0) {
+                            loadData(data, file.name);
+                            addFileToSidebar(file.name, data.length);
+                        }
+                    } catch (err) {
+                        showError('Failed to parse file: ' + err.message);
+                    }
+                };
+                
+                if (file.name.match(/\.xlsx?$/)) {
+                    reader.readAsBinaryString(file);
+                } else {
+                    reader.readAsText(file);
+                }
+            });
+        }
+
+        function parseCSV(text) {
+            const lines = text.trim().split('\n');
+            const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+            return lines.slice(1).map(line => {
+                const values = line.match(/(".*?"|[^",\s]*)(?=\s*,|\s*$)/g) || line.split(',');
+                const obj = {};
+                headers.forEach((h, i) => {
+                    let val = values[i] ? values[i].trim().replace(/^"|"$/g, '') : '';
+                    // Try to convert to number
+                    if (!isNaN(val) && val !== '') val = Number(val);
+                    obj[h] = val;
+                });
+                return obj;
+            }).filter(row => Object.values(row).some(v => v !== ''));
+        }
+
+        function loadData(data, filename) {
+            currentData = data;
+            currentFileName = filename;
+            updateDataPreview();
+            document.getElementById('emptyState').classList.add('hidden');
+            document.getElementById('chatContainer').classList.remove('hidden');
+            document.getElementById('dataPanel').classList.remove('hidden');
+            
+            // Welcome message
+            addMessage('assistant', `I've loaded **${filename}** with **${data.length.toLocaleString()} rows** and **${Object.keys(data[0]).length} columns**. 
+
+What would you like to know? Try asking:
+• "Show me summary statistics"
+• "What are the trends over time?"
+• "Create a visualization of the top categories"
+• "Find any correlations between variables"`);
+        }
+
+        function addFileToSidebar(name, count) {
+            const div = document.createElement('div');
+            div.className = 'flex items-center justify-between p-3 bg-indigo-50 rounded-lg border border-indigo-100';
+            div.innerHTML = `
+                <div class="flex items-center gap-2 overflow-hidden">
+                    <svg class="w-4 h-4 text-indigo-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    <span class="text-sm text-indigo-900 truncate">${name}</span>
+                </div>
+                <span class="text-xs text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full">${count}</span>
+            `;
+            document.getElementById('fileList').appendChild(div);
+        }
+
+        function updateDataPreview() {
+            if (!currentData || currentData.length === 0) return;
+            
+            const headers = Object.keys(currentData[0]);
+            const preview = currentData.slice(0, 100); // Show first 100 rows
+            
+            document.getElementById('rowCount').textContent = `${currentData.length.toLocaleString()} rows`;
+            document.getElementById('colCount').textContent = `${headers.length} columns`;
+            
+            // Header
+            const headerRow = document.getElementById('tableHeader');
+            headerRow.innerHTML = headers.map(h => `<th class="px-6 py-3 font-medium">${h}</th>`).join('');
+            
+            // Body
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = preview.map((row, i) => `
+                <tr class="hover:bg-gray-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}">
+                    ${headers.map(h => `<td class="px-6 py-3 text-gray-900 truncate max-w-xs">${row[h] !== undefined ? row[h] : ''}</td>`).join('')}
+                </tr>
+            `).join('');
+        }
+
+        function toggleDataPanel() {
+            const panel = document.getElementById('dataPanel');
+            panel.classList.toggle('hidden');
+        }
+
+        // Chat Functions
+        function quickAsk(text) {
+            if (!currentData) {
+                // Load sample first then ask
+                loadSample('sales', () => {
+                    document.getElementById('userInput').value = text;
+                    sendMessage();
+                });
+            } else {
+                document.getElementById('userInput').value = text;
+                sendMessage();
+            }
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('userInput');
+            const text = input.value.trim();
+            if (!text || isProcessing) return;
+            
+            if (!currentData) {
+                showError('Please upload a data file first');
+                return;
+            }
+
+            // Add user message
+            addMessage('user', text);
+            input.value = '';
+            input.style.height = 'auto';
+            
+            // Process
+            processQuery(text);
+        }
+
+        function addMessage(role, content, metadata = {}) {
+            const container = document.getElementById('chatContainer');
+            const div = document.createElement('div');
+            div.className = `flex gap-4 ${role === 'user' ? 'flex-row-reverse' : ''} chat-bubble`;
+            
+            const avatar = role === 'user' 
+                ? '<div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center text-gray-600 text-sm font-bold flex-shrink-0">U</div>'
+                : '<div class="w-8 h-8 gradient-bg rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0">AI</div>';
+            
+            let contentHtml = formatMessage(content);
+            
+            // Add metadata (code, charts, tables)
+            if (metadata.code) {
+                contentHtml += `
+                    <div class="mt-3 bg-gray-900 rounded-lg overflow-hidden">
+                        <div class="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+                            <span class="text-xs text-gray-400 font-mono">analysis.py</span>
+                            <button onclick="navigator.clipboard.writeText(this.nextElementSibling.textContent)" class="text-xs text-gray-400 hover:text-white">Copy</button>
+                        </div>
+                        <pre class="p-4 text-sm text-green-400 overflow-x-auto code-block">${escapeHtml(metadata.code)}</pre>
+                    </div>
+                `;
+            }
+            
+            if (metadata.chart) {
+                contentHtml += `
+                    <div class="mt-4 bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                        <canvas id="chart-${Date.now()}" width="400" height="300"></canvas>
+                    </div>
+                `;
+            }
+            
+            if (metadata.table) {
+                contentHtml += createTableHtml(metadata.table);
+            }
+
+            div.innerHTML = `
+                ${avatar}
+                <div class="flex-1 ${role === 'user' ? 'text-right' : ''}">
+                    <div class="inline-block max-w-3xl ${role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-900'} rounded-2xl px-6 py-3 shadow-sm text-left">
+                        ${contentHtml}
+                    </div>
+                </div>
+            `;
+            
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+            
+            // Initialize chart if present
+            if (metadata.chart && metadata.chartConfig) {
+                setTimeout(() => {
+                    const canvas = div.querySelector('canvas');
+                    if (canvas) {
+                        new Chart(canvas, metadata.chartConfig);
+                    }
+                }, 100);
+            }
+            
+            chatHistory.push({role, content, metadata});
+        }
+
+        function formatMessage(text) {
+            // Convert markdown-like syntax
+            text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            text = text.replace(/`(.*?)`/g, '<code class="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono">$1</code>');
+            text = text.replace(/\n/g, '<br>');
+            return text;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function createTableHtml(data) {
+            if (!data || data.length === 0) return '';
+            const headers = Object.keys(data[0]);
+            return `
+                <div class="mt-4 overflow-x-auto rounded-lg border border-gray-200">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>${headers.map(h => `<th class="px-4 py-2 text-left font-medium text-gray-700">${h}</th>`).join('')}</tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            ${data.slice(0, 10).map(row => `
+                                <tr class="hover:bg-gray-50">
+                                    ${headers.map(h => `<td class="px-4 py-2 text-gray-900">${row[h] !== undefined ? row[h] : ''}</td>`).join('')}
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                    ${data.length > 10 ? `<div class="px-4 py-2 text-xs text-gray-500 bg-gray-50 border-t">Showing 10 of ${data.length} rows</div>` : ''}
+                </div>
+            `;
+        }
+
+        // AI Processing Simulation
+        async function processQuery(query) {
+            isProcessing = true;
+            showTyping();
+            
+            // Simulate processing delay
+            await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000));
+            
+            hideTyping();
+            
+            // Generate contextual response based on query and data
+            const response = generateAnalysis(query, currentData);
+            addMessage('assistant', response.text, response.metadata);
+            
+            isProcessing = false;
+        }
+
+        function showTyping() {
+            const container = document.getElementById('chatContainer');
+            const div = document.createElement('div');
+            div.id = 'typingIndicator';
+            div.className = 'flex gap-4 chat-bubble';
+            div.innerHTML = `
+                <div class="w-8 h-8 gradient-bg rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0">AI</div>
+                <div class="flex-1">
+                    <div class="inline-block bg-white border border-gray-200 rounded-2xl px-6 py-4 shadow-sm">
+                        <div class="typing-indicator">
+                            <span></span><span></span><span></span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function hideTyping() {
+            const indicator = document.getElementById('typingIndicator');
+            if (indicator) indicator.remove();
+        }
+
+        // Analysis Engine
+        function generateAnalysis(query, data) {
+            const q = query.toLowerCase();
+            const headers = Object.keys(data[0]);
+            const numericCols = headers.filter(h => typeof data[0][h] === 'number');
+            const categoricalCols = headers.filter(h => typeof data[0][h] === 'string');
+            
+            // Summary Statistics
+            if (q.includes('summary') || q.includes('statistics') || q.includes('describe')) {
+                const stats = calculateStats(data, numericCols);
+                return {
+                    text: `Here's a statistical summary of your dataset:\n\n• **Total Records**: ${data.length.toLocaleString()}\n• **Numeric Columns**: ${numericCols.length}\n• **Categorical Columns**: ${categoricalCols.length}\n\nKey insights from the analysis:`,
+                    metadata: {
+                        code: generatePythonCode('summary', headers),
+                        table: stats.slice(0, 5)
+                    }
+                };
+            }
+            
+            // Correlation
+            if (q.includes('correlation') || q.includes('relationship')) {
+                if (numericCols.length >= 2) {
+                    const corr = calculateCorrelation(data, numericCols.slice(0, 2));
+                    return {
+                        text: `I found a **correlation coefficient of ${corr.toFixed(3)}** between ${numericCols[0]} and ${numericCols[1]}.\n\nThis indicates a ${Math.abs(corr) > 0.7 ? 'strong' : Math.abs(corr) > 0.4 ? 'moderate' : 'weak'} ${corr > 0 ? 'positive' : 'negative'} relationship.`,
+                        metadata: {
+                            code: generatePythonCode('correlation', numericCols.slice(0, 2)),
+                            chart: true,
+                            chartConfig: createScatterConfig(data, numericCols.slice(0, 2))
+                        }
+                    };
+                }
+            }
+            
+            // Visualization requests
+            if (q.includes('chart') || q.includes('plot') || q.includes('graph') || q.includes('visualization') || q.includes('show me')) {
+                const col = categoricalCols[0] || numericCols[0];
+                const valCol = numericCols[0];
+                
+                if (q.includes('bar') || q.includes('column')) {
+                    const aggregated = aggregateData(data, col, valCol);
+                    return {
+                        text: `Here's a bar chart showing **${valCol} by ${col}**. The highest value is **${aggregated[0]?.[valCol] || 'N/A'}** for **${aggregated[0]?.[col] || 'N/A'}**.`,
+                        metadata: {
+                            code: generatePythonCode('bar', [col, valCol]),
+                            chart: true,
+                            chartConfig: createBarConfig(aggregated, col, valCol)
+                        }
+                    };
+                }
+                
+                if (q.includes('line') || q.includes('trend') || q.includes('time')) {
+                    return {
+                        text: `I've plotted the trend of **${valCol}** over time/sequence. You can see the pattern clearly in the visualization below.`,
+                        metadata: {
+                            code: generatePythonCode('line', [valCol]),
+                            chart: true,
+                            chartConfig: createLineConfig(data, valCol)
+                        }
+                    };
+                }
+                
+                if (q.includes('pie') || q.includes('distribution')) {
+                    const aggregated = aggregateData(data, col, valCol);
+                    return {
+                        text: `Here's the distribution of **${col}**. The largest segment represents **${aggregated[0]?.[col]}** with **${((aggregated[0]?.[valCol] || 0) / aggregated.reduce((a,b) => a + (b[valCol] || 0), 0) * 100).toFixed(1)}%** of the total.`,
+                        metadata: {
+                            code: generatePythonCode('pie', [col, valCol]),
+                            chart: true,
+                            chartConfig: createPieConfig(aggregated, col, valCol)
+                        }
+                    };
+                }
+                
+                // Default visualization
+                const aggregated = aggregateData(data, col, valCol);
+                return {
+                    text: `I've created a visualization based on your data. This shows **${valCol}** grouped by **${col}**.`,
+                    metadata: {
+                        code: generatePythonCode('auto', [col, valCol]),
+                        chart: true,
+                        chartConfig: createBarConfig(aggregated, col, valCol)
+                    }
+                };
+            }
+            
+            // Outlier detection
+            if (q.includes('outlier') || q.includes('anomaly')) {
+                const outliers = detectOutliers(data, numericCols[0]);
+                return {
+                    text: `I detected **${outliers.length} potential outliers** in ${numericCols[0]} using the IQR method.\n\nValues outside the range are flagged as anomalies. Review these data points for data quality issues or special cases.`,
+                    metadata: {
+                        code: generatePythonCode('outlier', [numericCols[0]]),
+                        table: outliers.slice(0, 5)
+                    }
+                };
+            }
+            
+            // Forecasting
+            if (q.includes('predict') || q.includes('forecast') || q.includes('future')) {
+                return {
+                    text: `Based on historical patterns in **${numericCols[0]}**, here's my forecast:\n\n• **Next Period Prediction**: ${(data.reduce((a,b) => a + (b[numericCols[0]] || 0), 0) / data.length * 1.05).toFixed(2)}\n• **Trend Direction**: ${data[data.length-1][numericCols[0]] > data[0][numericCols[0]] ? '↗️ Upward' : '↘️ Downward'}\n• **Confidence**: Medium (based on available data)\n\n*Note: This is a simplified trend projection. For accurate forecasting, consider seasonality and external factors.*`,
+                    metadata: {
+                        code: generatePythonCode('forecast', [numericCols[0]]),
+                        chart: true,
+                        chartConfig: createForecastConfig(data, numericCols[0])
+                    }
+                };
+            }
+            
+            // Default response
+            return {
+                text: `I analyzed your data based on "${query}". Here are the key findings:\n\n• Dataset contains **${data.length} records** with **${headers.length} variables**\n• **${numericCols.length}** numeric columns, **${categoricalCols.length}** categorical columns\n• Numeric range: ${numericCols.map(n => `${n} (${data[0][n]} to ${data[data.length-1][n]})`).join(', ')}\n\nWould you like me to create a specific visualization or perform deeper statistical analysis?`,
+                metadata: {
+                    code: generatePythonCode('explore', headers)
+                }
+            };
+        }
+
+        // Statistical Functions
+        function calculateStats(data, numericCols) {
+            return numericCols.slice(0, 5).map(col => {
+                const values = data.map(d => d[col]).filter(v => !isNaN(v));
+                const sum = values.reduce((a, b) => a + b, 0);
+                const mean = sum / values.length;
+                const sorted = [...values].sort((a, b) => a - b);
+                const median = sorted[Math.floor(sorted.length / 2)];
+                const min = Math.min(...values);
+                const max = Math.max(...values);
+                
+                return {
+                    Column: col,
+                    Count: values.length,
+                    Mean: mean.toFixed(2),
+                    Median: median,
+                    Min: min,
+                    Max: max,
+                    Range: (max - min).toFixed(2)
+                };
+            });
+        }
+
+        function calculateCorrelation(data, cols) {
+            const x = data.map(d => d[cols[0]]);
+            const y = data.map(d => d[cols[1]]);
+            const n = x.length;
+            const sumX = x.reduce((a, b) => a + b, 0);
+            const sumY = y.reduce((a, b) => a + b, 0);
+            const sumXY = x.reduce((a, b, i) => a + b * y[i], 0);
+            const sumX2 = x.reduce((a, b) => a + b * b, 0);
+            const sumY2 = y.reduce((a, b) => a + b * b, 0);
+            
+            return (n * sumXY - sumX * sumY) / Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
+        }
+
+        function aggregateData(data, groupCol, valueCol) {
+            const groups = {};
+            data.forEach(row => {
+                const key = row[groupCol];
+                if (!groups[key]) groups[key] = { [groupCol]: key, [valueCol]: 0, count: 0 };
+                groups[key][valueCol] += Number(row[valueCol]) || 0;
+                groups[key].count++;
+            });
+            return Object.values(groups).sort((a, b) => b[valueCol] - a[valueCol]).slice(0, 10);
+        }
+
+        function detectOutliers(data, col) {
+            const values = data.map(d => d[col]).filter(v => !isNaN(v)).sort((a, b) => a - b);
+            const q1 = values[Math.floor(values.length * 0.25)];
+            const q3 = values[Math.floor(values.length * 0.75)];
+            const iqr = q3 - q1;
+            const lower = q1 - 1.5 * iqr;
+            const upper = q3 + 1.5 * iqr;
+            
+            return data.filter(row => row[col] < lower || row[col] > upper).slice(0, 10);
+        }
+
+        // Chart Configurations
+        function createBarConfig(data, labelCol, valueCol) {
+            return {
+                type: 'bar',
+                data: {
+                    labels: data.map(d => d[labelCol]),
+                    datasets: [{
+                        label: valueCol,
+                        data: data.map(d => d[valueCol]),
+                        backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                        borderColor: 'rgba(102, 126, 234, 1)',
+                        borderWidth: 2,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        title: { display: true, text: `${valueCol} by ${labelCol}` }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            };
+        }
+
+        function createLineConfig(data, col) {
+            return {
+                type: 'line',
+                data: {
+                    labels: data.map((_, i) => i + 1),
+                    datasets: [{
+                        label: col,
+                        data: data.map(d => d[col]),
+                        borderColor: 'rgba(118, 75, 162, 1)',
+                        backgroundColor: 'rgba(118, 75, 162, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        title: { display: true, text: `${col} Trend` }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            };
+        }
+
+        function createScatterConfig(data, cols) {
+            return {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: `${cols[0]} vs ${cols[1]}`,
+                        data: data.map(d => ({ x: d[cols[0]], y: d[cols[1]] })),
+                        backgroundColor: 'rgba(102, 126, 234, 0.6)',
+                        borderColor: 'rgba(102, 126, 234, 1)',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: { display: true, text: `Correlation: ${cols[0]} vs ${cols[1]}` }
+                    },
+                    scales: {
+                        x: { title: { display: true, text: cols[0] }, grid: { color: 'rgba(0,0,0,0.05)' } },
+                        y: { title: { display: true, text: cols[1] }, grid: { color: 'rgba(0,0,0,0.05)' } }
+                    }
+                }
+            };
+        }
+
+        function createPieConfig(data, labelCol, valueCol) {
+            const colors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#00f2fe', '#43e97b', '#38f9d7'];
+            return {
+                type: 'doughnut',
+                data: {
+                    labels: data.map(d => d[labelCol]),
+                    datasets: [{
+                        data: data.map(d => d[valueCol]),
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right' },
+                        title: { display: true, text: `Distribution of ${labelCol}` }
+                    }
+                }
+            };
+        }
+
+        function createForecastConfig(data, col) {
+            const actual = data.map(d => d[col]);
+            const trend = actual.map((v, i) => v * (1 + (i / actual.length) * 0.1));
+            const forecast = [...actual, ...trend.slice(-3).map(v => v * 1.05)];
+            
+            return {
+                type: 'line',
+                data: {
+                    labels: [...data.map((_, i) => `T-${data.length-i}`), 'T+1', 'T+2', 'T+3'],
+                    datasets: [
+                        {
+                            label: 'Actual',
+                            data: [...actual, null, null, null],
+                            borderColor: 'rgba(102, 126, 234, 1)',
+                            backgroundColor: 'transparent',
+                            borderWidth: 3
+                        },
+                        {
+                            label: 'Forecast',
+                            data: [...Array(actual.length).fill(null), ...forecast.slice(-3)],
+                            borderColor: 'rgba(118, 75, 162, 1)',
+                            backgroundColor: 'rgba(118, 75, 162, 0.1)',
+                            borderDash: [5, 5],
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: { display: true, text: `${col} Forecast` },
+                        legend: { display: true }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            };
+        }
+
+        // Code Generation
+        function generatePythonCode(type, params) {
+            const codes = {
+                summary: `import pandas as pd
+df = pd.read_csv('data.csv')
+summary = df.describe()
+print(summary)`,
+                correlation: `import pandas as pd
+import seaborn as sns
+corr = df['${params[0]}'].corr(df['${params[1]}'])
+sns.scatterplot(data=df, x='${params[0]}', y='${params[1]}')`,
+                bar: `import matplotlib.pyplot as plt
+df.groupby('${params[0]}')['${params[1]}'].sum().plot(kind='bar')
+plt.title('${params[1]} by ${params[0]}')
+plt.show()`,
+                line: `df['${params[0]}'].plot(kind='line', figsize=(10,6))
+plt.title('${params[0]} Trend')
+plt.show()`,
+                pie: `df.groupby('${params[0]}')['${params[1]}'].sum().plot(kind='pie', autopct='%1.1f%%')
+plt.title('Distribution of ${params[0]}')
+plt.show()`,
+                outlier: `Q1 = df['${params[0]}'].quantile(0.25)
+Q3 = df['${params[0]}'].quantile(0.75)
+IQR = Q3 - Q1
+outliers = df[(df['${params[0]}'] < Q1-1.5*IQR) | (df['${params[0]}'] > Q3+1.5*IQR)]`,
+                forecast: `from sklearn.linear_model import LinearRegression
+import numpy as np
+X = np.arange(len(df)).reshape(-1,1)
+y = df['${params[0]}']
+model = LinearRegression().fit(X, y)
+future = model.predict([[len(df)+1], [len(df)+2], [len(df)+3]])`,
+                auto: `# Automated analysis
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Aggregate data
+result = df.groupby('${params[0]}')['${params[1]}'].sum().sort_values(ascending=False)
+
+# Create visualization
+plt.figure(figsize=(10,6))
+result.plot(kind='bar', color='steelblue')
+plt.title('Analysis Results')
+plt.tight_layout()
+plt.show()`,
+                explore: `# Data exploration
+print(f"Shape: {df.shape}")
+print(f"Columns: {df.columns.tolist()}")
+print(df.head())
+print(df.describe())`
+            };
+            return codes[type] || codes.explore;
+        }
+
+        // Sample Data Loader
+        function loadSample(type, callback) {
+            let data;
+            switch(type) {
+                case 'sales':
+                    data = generateSalesData();
+                    break;
+                case 'customers':
+                    data = generateCustomerData();
+                    break;
+                case 'stocks':
+                    data = generateStockData();
+                    break;
+            }
+            loadData(data, `${type}_sample.csv`);
+            if (callback) setTimeout(callback, 500);
+        }
+
+        function generateSalesData() {
+            const regions = ['North', 'South', 'East', 'West'];
+            const products = ['Electronics', 'Clothing', 'Food', 'Home'];
+            const data = [];
+            for (let i = 0; i < 100; i++) {
+                data.push({
+                    Date: `2024-${String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')}-01`,
+                    Region: regions[Math.floor(Math.random() * regions.length)],
+                    Product: products[Math.floor(Math.random() * products.length)],
+                    Sales: Math.floor(Math.random() * 10000) + 1000,
+                    Units: Math.floor(Math.random() * 100) + 10,
+                    Customer_Rating: (Math.random() * 2 + 3).toFixed(1)
+                });
+            }
+            return data;
+        }
+
+        function generateCustomerData() {
+            const segments = ['Enterprise', 'SMB', 'Startup', 'Individual'];
+            const channels = ['Organic', 'Paid', 'Referral', 'Social'];
+            const data = [];
+            for (let i = 0; i < 150; i++) {
+                data.push({
+                    Customer_ID: `CUST-${1000 + i}`,
+                    Age: Math.floor(Math.random() * 50) + 20,
+                    Segment: segments[Math.floor(Math.random() * segments.length)],
+                    Acquisition_Channel: channels[Math.floor(Math.random() * channels.length)],
+                    Lifetime_Value: Math.floor(Math.random() * 50000) + 1000,
+                    Churn_Risk: Math.random() > 0.7 ? 'High' : 'Low',
+                    Support_Tickets: Math.floor(Math.random() * 10)
+                });
+            }
+            return data;
+        }
+
+        function generateStockData() {
+            const data = [];
+            let price = 150;
+            for (let i = 0; i < 90; i++) {
+                price = price + (Math.random() - 0.5) * 10;
+                data.push({
+                    Date: `2024-Q${Math.floor(i/30)+1}-W${(i%4)+1}`,
+                    Open: price.toFixed(2),
+                    High: (price + Math.random() * 5).toFixed(2),
+                    Low: (price - Math.random() * 5).toFixed(2),
+                    Close: (price + (Math.random() - 0.5) * 3).toFixed(2),
+                    Volume: Math.floor(Math.random() * 1000000) + 500000
+                });
+            }
+            return data;
+        }
+
+        function downloadData() {
+            if (!currentData) return;
+            const csv = convertToCSV(currentData);
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = currentFileName || 'export.csv';
+            a.click();
+        }
+
+        function convertToCSV(data) {
+            if (!data || data.length === 0) return '';
+            const headers = Object.keys(data[0]);
+            const rows = data.map(row => headers.map(h => `"${row[h] || ''}"`).join(','));
+            return [headers.join(','), ...rows].join('\n');
+        }
+
+        function showError(msg) {
+            const div = document.createElement('div');
+            div.className = 'fixed top-4 right-4 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg shadow-lg z-50 fade-in';
+            div.innerHTML = `<div class="flex items-center gap-2"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg><span>${msg}</span></div>`;
+            document.body.appendChild(div);
+            setTimeout(() => div.remove(), 5000);
+        }
+    </script>
+</body>
+</html>
